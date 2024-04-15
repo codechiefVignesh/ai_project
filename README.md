@@ -39,6 +39,20 @@ Required computational power :
 
 
 
+### BOARD SIZE
+> 2 x 2
+
+> 3 x 3
+
+> 4 x 4
+
+> 5 x 5
+
+> 6 x 6
+
+> 7 x 7
+
+> 8 x 8
 
 
 
