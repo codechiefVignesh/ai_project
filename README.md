@@ -8,6 +8,8 @@ Iterative Deepening Depth First Search
 Required computational power :
 
 # States
+#### Generating state space using probabilistic approach
+      
 
       Full / Perfect Information and Partial
       Information States
@@ -37,6 +39,9 @@ Required computational power :
 
 # Sizes
 
+# Initial state
+> a row with a meaningful word
+> randomly spaced letters
 
 
 ### BOARD SIZE
