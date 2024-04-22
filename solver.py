@@ -1,30 +1,32 @@
 import tkinter as tk
 import random
 import enchant
-from tkinter import messagebox
 import os
+import copy
+from tkinter import messagebox
 
-# Use a dictionary for valid word checking
+
 english_dict = enchant.Dict("en_US")
 
-# Constants
+
 BOARD_SIZE = 5
 EMPTY = ""
 PLAYER_1_COLOR = "lightblue"
 PLAYER_2_COLOR = "lightgreen"
 WORDS_FILE = "words_alpha.txt"
 
-# Game State Class
+
 class WordGame:
     def __init__(self):
-        # Initialize boards for Player 1 and Player 2
         self.player_boards = {
             1: [[EMPTY for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)],
             2: [[EMPTY for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)],
         }
         self.current_player = 1
-        self.word_count = {1: 0, 2: 0}  # Track words formed by each player
+        self.word_count = {1: 0, 2: 0} 
         self.load_word_list()
+        
+        self.start_with_random_word()
 
     def switch_player(self):
         """Switch the current player."""
@@ -33,31 +35,47 @@ class WordGame:
     def is_board_full(self, player):
         """Check if a player's board is completely filled."""
         board = self.player_boards[player]
-        for row in board:
-            if EMPTY in row:
-                return False
-        return True
+        return all(EMPTY not in row for row in board)
 
     def load_word_list(self):
-        """Load the list of valid words from the word file."""
         if not os.path.isfile(WORDS_FILE):
             raise FileNotFoundError(f"The word list file '{WORDS_FILE}' is missing.")
         with open(WORDS_FILE, "r") as word_file:
-            self.word_list = word_file.read().splitlines()
+            self.word_list = [word.strip() for word in word_file if len(word.strip()) == BOARD_SIZE]
+        print(f"Loaded {len(self.word_list)} words of length {BOARD_SIZE}.")
 
-    def suggest_word(self, letter, index, orientation):
-        """Suggest a word with a given letter at a specific index."""
-        possible_words = []
 
-        # Find words with the specified letter at a given position
-        for word in self.word_list:
-            if len(word) == BOARD_SIZE and word[index] == letter:
-                possible_words.append(word)
 
-        if possible_words:
-            return random.choice(possible_words)
+    def start_with_random_word(self):
+        """Start the game by placing a random word in a random row or column."""
+        initial_word = random.choice(self.word_list)
+        orientation = random.choice(["row", "column"])
+        index = random.randint(0, BOARD_SIZE - 1)
+
+        if orientation == "row":
+            self.player_boards[self.current_player][index] = list(initial_word)
         else:
-            return None
+            for i in range(BOARD_SIZE):
+                self.player_boards[self.current_player][i][index] = initial_word[i]
+
+
+        self.word_count[self.current_player] += 1
+
+    def suggest_word(self, letter, position, orientation):
+        possible_words = []
+        for word in self.word_list:
+            if len(word) == BOARD_SIZE and word[position] == letter:
+                possible_words.append(word)
+    
+        print(f"Suggesting word with letter '{letter}' at position {position} in {orientation}: {len(possible_words)} possible words.")
+        
+        return random.choice(possible_words) if possible_words else None
+
+
+
+    def validate_word(self, word):
+        """Check if a word is valid using the enchant dictionary."""
+        return english_dict.check(word)
 
     def fill_board_with_word(self, word, orientation, index):
         """Fill the appropriate row or column with the given word."""
@@ -69,9 +87,10 @@ class WordGame:
             for i in range(BOARD_SIZE):
                 board[i][index] = word[i]
 
-    def validate_word(self, word):
-        """Check if a word is valid using the enchant dictionary."""
-        return english_dict.check(word)
+    def revert_to_previous_state(self, previous_state):
+        """Revert the board to the previous state."""
+        self.player_boards[self.current_player] = previous_state
+        self.switch_player()  
 
 # GUI Class for the game
 class WordGameGUI(tk.Tk):
@@ -121,55 +140,60 @@ class WordGameGUI(tk.Tk):
         return entries
 
     def submit_move(self):
-        """Submit the player's move and let the AI suggest a word."""
         current_player = self.game.current_player
         entries = self.frames[current_player]
-
+    
+        # Save the current state for potential backtracking
+        previous_state = copy.deepcopy(self.game.player_boards[current_player])
+    
         # Find the letter that the player filled in
         letter = None
         orientation = None
         row_idx = None
         col_idx = None
-
+    
         # Detect which cell the player filled
         for i in range(BOARD_SIZE):
             for j in range(BOARD_SIZE):
-                if entries[i][j].get() == "":
-                    continue  # Skip empty cells
-                letter = entries[i][j].get().upper()
-                if len(letter) == 1:
+                cell_content = entries[i][j].get().lower()
+                if cell_content != EMPTY:
+                    letter = cell_content
                     row_idx = i
                     col_idx = j
                     break
             if letter:
                 break
-
+    
         if not letter:
             messagebox.showerror("Invalid Input", "Please enter a valid letter.")
             return
-
-        # Suggest a word based on the player's letter and orientation
+    
+        # Randomly decide whether to fill a row or a column
         orientation = random.choice(["row", "column"])
-
+    
+        # Suggest a word based on the player's letter and orientation
         if orientation == "row":
-            word = self.game.suggest_word(letter, col_idx, "row")
+            word = self.game.suggest_word(letter, col_idx, orientation)
         else:
-            word = self.game.suggest_word(letter, row_idx, "column")
-
+            word = self.game.suggest_word(letter, row_idx, orientation)
+    
         if word and self.game.validate_word(word):
             # Fill the appropriate row or column with the suggested word
-            self.game.fill_board_with_word(word, orientation, orientation == "row" and row_idx or col_idx)
-
+            if orientation == "row":
+                self.game.fill_board_with_word(word, orientation, row_idx)
+            else:
+                self.game.fill_board_with_word(word, orientation, col_idx)
+    
             # Update word count for the player
             self.game.word_count[current_player] += 1
-
+    
             # Update the GUI to reflect the new board state
             self.update_entries()
-
+    
             # Check if the board is full
             if self.game.is_board_full(current_player):
                 messagebox.showinfo(
-                    "Game Over", f"Player {current_player} wins with {self.game.word_count[current_player]} words!"
+                    "Game Over", f"Player {self.game.word_count[current_player]} words!"
                 )
                 self.quit()
             else:
@@ -177,14 +201,18 @@ class WordGameGUI(tk.Tk):
                 self.turn_label.config(
                     text=f"Player {self.game.current_player}'s turn"
                 )
-
+    
         else:
+            # Revert to the previous state and switch the turn
+            self.game.revert_to_previous_state(previous_state)
             messagebox.showerror("Invalid Word", "Could not suggest a valid word with this letter.")
+
 
     def update_entries(self):
         """Update the GUI to reflect the board's current state."""
-        entries = self.frames[self.game.current_player]
-        game_board = self.game.player_boards[self.game.current_player]
+        current_player = self.game.current_player
+        game_board = self.game.player_boards[current_player]
+        entries = self.frames[current_player]
 
         for i in range(BOARD_SIZE):
             for j in range(BOARD_SIZE):
